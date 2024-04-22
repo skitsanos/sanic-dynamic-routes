@@ -3,4 +3,5 @@ version: 3
 tasks:
   start:
     cmds:
-      - sanic server:app --debug
+      - python server.py
+      #- sanic server:app
