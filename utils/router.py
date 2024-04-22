@@ -1,12 +1,50 @@
 import importlib.util
+import jwt
 import logging
 import os
 import re
 
-from sanic import Sanic
+from functools import wraps
+from sanic import Sanic, json
 
 allowed_methods = (
     "get", "post", "put", "delete", "options", "head", "patch", "trace", "ws")
+
+
+def check_token(request):
+    if not request.token:
+        return False
+
+    try:
+        jwt.decode(
+            request.token, request.app.config.SECRET, algorithms=["HS256"]
+        )
+    except jwt.exceptions.InvalidTokenError:
+        return False
+    else:
+        return True
+
+
+def protected(wrapped):
+    def decorator(f):
+        @wraps(f)
+        async def decorated_function(request, *args, **kwargs):
+            is_authenticated = check_token(request)
+
+            if is_authenticated:
+                response = await f(request, *args, **kwargs)
+                return response
+            else:
+                return json({
+                    "error":
+                        {
+                            "message": "You are unauthorized."
+                        }
+                }, 401)
+
+        return decorated_function
+
+    return decorator(wrapped)
 
 
 def convert_to_url_params(input_string: str):
@@ -79,6 +117,7 @@ def load_route(
             f"Adding {method.upper()} {api_route_path if api_route_path != '/' else 'root (/)'}")
         logging.info(f"Loading {module_file_path}")
 
+        route_protected = getattr(module, 'protected', False)
         meta = getattr(module, 'meta', {})
 
         if meta:
@@ -87,6 +126,6 @@ def load_route(
         app.add_route(
             name=api_route_path,
             uri=api_route_path,
-            handler=module.handler,
+            handler=module.handler if not route_protected else protected(module.handler),
             methods=[method.upper()],
         )
