@@ -70,6 +70,7 @@ def load_route(
 
     if method == "ws":
         app.add_websocket_route(
+            name=api_route_path,
             uri=api_route_path,
             handler=module.handler,
         )
